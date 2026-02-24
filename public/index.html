@@ -50,20 +50,21 @@
     }
 
     #videos {
-      flex: 1;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 10px;
-      padding: 15px;
-    }
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 15px;
+  padding: 15px;
+  box-sizing: border-box;
+}
 
     video {
-      width: 100%;
-      height: 340px;
-      object-fit: cover;
-      border-radius: 12px;
-      background: black;
-    }
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* keeps aspect ratio */
+  border-radius: 12px;
+  background: black;
+}
 
     #controls {
       display: flex;
@@ -141,20 +142,33 @@ socket.on("new-user", userId => {
 });
 
 socket.on("offer", async ({ offer, from }) => {
-  createPeer(from, false);
-  await peers[from].setRemoteDescription(offer);
+
+  if (!peers[from]) {
+    createPeer(from, false);
+  }
+
+  await peers[from].setRemoteDescription(new RTCSessionDescription(offer));
+
   const answer = await peers[from].createAnswer();
   await peers[from].setLocalDescription(answer);
-  socket.emit("answer", { answer, to: from });
+
+  socket.emit("answer", {
+    answer: peers[from].localDescription,
+    to: from
+  });
 });
 
 socket.on("answer", async ({ answer, from }) => {
-  await peers[from].setRemoteDescription(answer);
+  await peers[from].setRemoteDescription(
+    new RTCSessionDescription(answer)
+  );
 });
 
 socket.on("ice-candidate", async ({ candidate, from }) => {
   if (peers[from]) {
-    await peers[from].addIceCandidate(candidate);
+    await peers[from].addIceCandidate(
+      new RTCIceCandidate(candidate)
+    );
   }
 });
 
@@ -204,17 +218,28 @@ function createPeer(userId, initiator) {
       });
   }
 }
-
 function addVideo(stream, id) {
   if (document.getElementById(id)) return;
 
+  const wrapper = document.createElement("div");
+  wrapper.id = id;
+  wrapper.style.position = "relative";
+  wrapper.style.width = "100%";
+  wrapper.style.aspectRatio = "16 / 9";
+  wrapper.style.background = "black";
+  wrapper.style.borderRadius = "12px";
+  wrapper.style.overflow = "hidden";
+
   const video = document.createElement("video");
-  video.id = id;
   video.srcObject = stream;
   video.autoplay = true;
   video.playsInline = true;
+  video.style.width = "100%";
+  video.style.height = "100%";
+  video.style.objectFit = "cover";
 
-  document.getElementById("videos").appendChild(video);
+  wrapper.appendChild(video);
+  document.getElementById("videos").appendChild(wrapper);
 }
 
 function toggleMute() {
