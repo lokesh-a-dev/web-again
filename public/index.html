@@ -30,7 +30,6 @@
     color: #e5e7eb;
     font-size: 14px;
     outline: none;
-    transition: border 0.2s ease;
   }
 
   #joinScreen input:focus {
@@ -45,7 +44,6 @@
     color: #e5e7eb;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s ease;
   }
 
   #joinScreen button:hover {
@@ -81,36 +79,29 @@
   #controls {
     display: flex;
     justify-content: center;
-    gap: 16px;
-    padding: 16px;
+    padding: 14px;
     background: #0f172a;
     border-top: 1px solid #1f2937;
   }
 
   #controls button {
-    padding: 8px 18px;
+    padding: 8px 22px;
     border-radius: 6px;
-    border: 1px solid #1f2937;
-    background: transparent;
-    color: #e5e7eb;
+    border: 1px solid #7f1d1d;
+    background: #1f2937;
+    color: #fca5a5;
     font-size: 13px;
     cursor: pointer;
     transition: all 0.2s ease;
   }
 
   #controls button:hover {
-    background: #1f2937;
-  }
-
-  /* Remove bright colors */
-  .muteBtn,
-  .cameraBtn {
-    background: transparent;
-    border: 1px solid #1f2937;
+    background: #7f1d1d;
+    color: white;
   }
 </style>
-
 </head>
+
 <body>
 
 <div id="joinScreen">
@@ -123,8 +114,7 @@
   <div id="videos"></div>
 
   <div id="controls">
-    <button class="muteBtn" onclick="toggleMute()">Mute</button>
-    <button class="cameraBtn" onclick="toggleCamera()">Camera Off</button>
+    <button onclick="endCall()">End Call</button>
   </div>
 </div>
 
@@ -134,8 +124,8 @@
 const socket = io();
 const peers = {};
 let localStream;
-let isMuted = false;
-let isCameraOff = false;
+
+/* ---------------- JOIN ROOM ---------------- */
 
 async function joinRoom() {
 
@@ -155,6 +145,8 @@ async function joinRoom() {
   socket.emit("join-room", roomId);
 }
 
+/* ---------------- SOCKET EVENTS ---------------- */
+
 socket.on("existing-users", users => {
   users.forEach(userId => {
     createPeer(userId, true);
@@ -171,7 +163,9 @@ socket.on("offer", async ({ offer, from }) => {
     createPeer(from, false);
   }
 
-  await peers[from].setRemoteDescription(new RTCSessionDescription(offer));
+  await peers[from].setRemoteDescription(
+    new RTCSessionDescription(offer)
+  );
 
   const answer = await peers[from].createAnswer();
   await peers[from].setLocalDescription(answer);
@@ -204,20 +198,22 @@ socket.on("user-left", userId => {
   }
 });
 
+/* ---------------- CREATE PEER ---------------- */
+
 function createPeer(userId, initiator) {
 
   if (peers[userId]) return;
 
   const pc = new RTCPeerConnection({
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { 
-      urls: "turn:openrelay.metered.ca:443?transport=tcp", 
-      username: "openrelayproject", 
-      credential: "openrelayproject" 
-    }
-  ]
-});
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      {
+        urls: "turn:openrelay.metered.ca:443?transport=tcp",
+        username: "openrelayproject",
+        credential: "openrelayproject"
+      }
+    ]
+  });
 
   peers[userId] = pc;
 
@@ -249,6 +245,9 @@ function createPeer(userId, initiator) {
       });
   }
 }
+
+/* ---------------- VIDEO HANDLING ---------------- */
+
 function addVideo(stream, id) {
   if (document.getElementById(id)) return;
 
@@ -273,21 +272,31 @@ function addVideo(stream, id) {
   document.getElementById("videos").appendChild(wrapper);
 }
 
-function toggleMute() {
-  isMuted = !isMuted;
-  localStream.getAudioTracks().forEach(track => {
-    track.enabled = !isMuted;
-  });
-}
+/* ---------------- END CALL ---------------- */
 
-function toggleCamera() {
-  isCameraOff = !isCameraOff;
-  localStream.getVideoTracks().forEach(track => {
-    track.enabled = !isCameraOff;
-  });
+function endCall() {
+
+  // Close all peer connections
+  Object.values(peers).forEach(pc => pc.close());
+
+  // Clear peer map
+  for (let id in peers) {
+    delete peers[id];
+  }
+
+  // Stop camera and mic
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+  }
+
+  // Clear UI
+  document.getElementById("videos").innerHTML = "";
+
+  // Reset screens
+  document.getElementById("roomContainer").style.display = "none";
+  document.getElementById("joinScreen").style.display = "flex";
 }
 
 </script>
-
 </body>
 </html>
