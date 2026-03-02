@@ -1,118 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>WebRTC Room</title>
+  <title>Minimal WebRTC</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #0b0f19;
+      color: white;
+    }
 
-<style>
-  body {
-    margin: 0;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #0b0f19;
-    color: #e5e7eb;
-  }
+    #join {
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
 
-  /* Join Screen */
-  #joinScreen {
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    gap: 20px;
-  }
+    #room {
+      display: none;
+      height: 100vh;
+      flex-direction: column;
+    }
 
-  #joinScreen input {
-    padding: 12px 16px;
-    width: 260px;
-    border-radius: 6px;
-    border: 1px solid #1f2937;
-    background: #111827;
-    color: #e5e7eb;
-    font-size: 14px;
-    outline: none;
-  }
+    #videos {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 10px;
+      padding: 10px;
+    }
 
-  #joinScreen input:focus {
-    border-color: #3b82f6;
-  }
+    video {
+      width: 100%;
+      background: black;
+      border-radius: 8px;
+    }
 
-  #joinScreen button {
-    padding: 10px 22px;
-    border-radius: 6px;
-    border: 1px solid #1f2937;
-    background: transparent;
-    color: #e5e7eb;
-    font-size: 14px;
-    cursor: pointer;
-  }
+    button {
+      padding: 8px 16px;
+      background: #1f2937;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
 
-  #joinScreen button:hover {
-    background: #1f2937;
-  }
+    button:hover {
+      background: #7f1d1d;
+    }
 
-  /* Room Container */
-  #roomContainer {
-    display: none;
-    height: 100vh;
-    flex-direction: column;
-  }
-
-  #videos {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px;
-    padding: 20px;
-    box-sizing: border-box;
-  }
-
-  video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 10px;
-    background: #000;
-    border: 1px solid #1f2937;
-  }
-
-  /* Controls */
-  #controls {
-    display: flex;
-    justify-content: center;
-    padding: 14px;
-    background: #0f172a;
-    border-top: 1px solid #1f2937;
-  }
-
-  #controls button {
-    padding: 8px 22px;
-    border-radius: 6px;
-    border: 1px solid #7f1d1d;
-    background: #1f2937;
-    color: #fca5a5;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  #controls button:hover {
-    background: #7f1d1d;
-    color: white;
-  }
-</style>
+    #controls {
+      padding: 10px;
+      text-align: center;
+      background: #111827;
+    }
+  </style>
 </head>
-
 <body>
 
-<div id="joinScreen">
-  <h2>WebRTC Room</h2>
-  <input id="roomId" placeholder="Enter Room ID" />
-  <button onclick="joinRoom()">Join Room</button>
+<div id="join">
+  <input id="roomId" placeholder="Room ID" />
+  <button onclick="joinRoom()">Join</button>
 </div>
 
-<div id="roomContainer">
+<div id="room">
   <div id="videos"></div>
-
   <div id="controls">
     <button onclick="endCall()">End Call</button>
   </div>
@@ -120,20 +73,18 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-
 const socket = io();
 const peers = {};
 let localStream;
 
-/* ---------------- JOIN ROOM ---------------- */
+/* JOIN ROOM */
 
 async function joinRoom() {
-
   const roomId = document.getElementById("roomId").value;
-  if (!roomId) return alert("Enter Room ID");
+  if (!roomId) return;
 
-  document.getElementById("joinScreen").style.display = "none";
-  document.getElementById("roomContainer").style.display = "flex";
+  document.getElementById("join").style.display = "none";
+  document.getElementById("room").style.display = "flex";
 
   localStream = await navigator.mediaDevices.getUserMedia({
     video: true,
@@ -145,158 +96,115 @@ async function joinRoom() {
   socket.emit("join-room", roomId);
 }
 
-/* ---------------- SOCKET EVENTS ---------------- */
+/* SOCKET EVENTS */
 
 socket.on("existing-users", users => {
-  users.forEach(userId => {
-    createPeer(userId, true);
-  });
+  users.forEach(id => createPeer(id, true));
 });
 
-socket.on("new-user", userId => {
-  createPeer(userId, false);
+socket.on("new-user", id => {
+  createPeer(id, false);
 });
 
 socket.on("offer", async ({ offer, from }) => {
+  if (!peers[from]) createPeer(from, false);
 
-  if (!peers[from]) {
-    createPeer(from, false);
-  }
-
-  await peers[from].setRemoteDescription(
-    new RTCSessionDescription(offer)
-  );
-
+  await peers[from].setRemoteDescription(offer);
   const answer = await peers[from].createAnswer();
   await peers[from].setLocalDescription(answer);
 
-  socket.emit("answer", {
-    answer: peers[from].localDescription,
-    to: from
-  });
+  socket.emit("answer", { answer, to: from });
 });
 
 socket.on("answer", async ({ answer, from }) => {
-  await peers[from].setRemoteDescription(
-    new RTCSessionDescription(answer)
-  );
+  await peers[from].setRemoteDescription(answer);
 });
 
 socket.on("ice-candidate", async ({ candidate, from }) => {
   if (peers[from]) {
-    await peers[from].addIceCandidate(
-      new RTCIceCandidate(candidate)
-    );
+    await peers[from].addIceCandidate(candidate);
   }
 });
 
-socket.on("user-left", userId => {
-  if (peers[userId]) {
-    peers[userId].close();
-    delete peers[userId];
-    document.getElementById(userId)?.remove();
+socket.on("user-left", id => {
+  if (peers[id]) {
+    peers[id].close();
+    delete peers[id];
+    document.getElementById(id)?.remove();
   }
 });
 
-/* ---------------- CREATE PEER ---------------- */
+/* PEER CREATION */
 
-function createPeer(userId, initiator) {
+function createPeer(id, initiator) {
 
-  if (peers[userId]) return;
+  if (peers[id]) return;
 
   const pc = new RTCPeerConnection({
     iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      {
-        urls: "turn:openrelay.metered.ca:443?transport=tcp",
-        username: "openrelayproject",
-        credential: "openrelayproject"
-      }
+      { urls: "stun:stun.l.google.com:19302" }
     ]
   });
 
-  peers[userId] = pc;
+  peers[id] = pc;
 
   localStream.getTracks().forEach(track =>
     pc.addTrack(track, localStream)
   );
 
-  pc.ontrack = event => {
-    addVideo(event.streams[0], userId);
-  };
+  pc.ontrack = e => addVideo(e.streams[0], id);
 
-  pc.onicecandidate = event => {
-    if (event.candidate) {
+  pc.onicecandidate = e => {
+    if (e.candidate) {
       socket.emit("ice-candidate", {
-        candidate: event.candidate,
-        to: userId
+        candidate: e.candidate,
+        to: id
       });
     }
   };
 
   if (initiator) {
     pc.createOffer()
-      .then(offer => pc.setLocalDescription(offer))
+      .then(o => pc.setLocalDescription(o))
       .then(() => {
         socket.emit("offer", {
           offer: pc.localDescription,
-          to: userId
+          to: id
         });
       });
   }
 }
 
-/* ---------------- VIDEO HANDLING ---------------- */
+/* VIDEO HANDLING */
 
 function addVideo(stream, id) {
   if (document.getElementById(id)) return;
 
-  const wrapper = document.createElement("div");
-  wrapper.id = id;
-  wrapper.style.position = "relative";
-  wrapper.style.width = "100%";
-  wrapper.style.aspectRatio = "16 / 9";
-  wrapper.style.background = "black";
-  wrapper.style.borderRadius = "12px";
-  wrapper.style.overflow = "hidden";
-
   const video = document.createElement("video");
+  video.id = id;
   video.srcObject = stream;
   video.autoplay = true;
   video.playsInline = true;
-  video.style.width = "100%";
-  video.style.height = "100%";
-  video.style.objectFit = "cover";
 
-  wrapper.appendChild(video);
-  document.getElementById("videos").appendChild(wrapper);
+  document.getElementById("videos").appendChild(video);
 }
 
-/* ---------------- END CALL ---------------- */
+/* END CALL */
 
 function endCall() {
-
-  // Close all peer connections
   Object.values(peers).forEach(pc => pc.close());
 
-  // Clear peer map
-  for (let id in peers) {
-    delete peers[id];
-  }
+  for (let id in peers) delete peers[id];
 
-  // Stop camera and mic
   if (localStream) {
     localStream.getTracks().forEach(track => track.stop());
   }
 
-  // Clear UI
   document.getElementById("videos").innerHTML = "";
-
-  // Reset screens
-  document.getElementById("roomContainer").style.display = "none";
-  document.getElementById("joinScreen").style.display = "flex";
+  document.getElementById("room").style.display = "none";
+  document.getElementById("join").style.display = "flex";
 }
-
 </script>
+
 </body>
 </html>
